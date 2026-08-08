@@ -554,6 +554,57 @@
   .sprite-frame.jump { background-position: -48px 0; }
   .sprite-frame.landed { transform: scaleY(0.9) scaleX(1.05); }
 
+  .speech-bubble {
+    position: absolute;
+    right: 0;
+    bottom: 100%;
+    margin-bottom: 10px;
+    max-width: 42vw;
+    background: var(--surface);
+    color: var(--ink);
+    border: 2px solid var(--ink);
+    border-radius: 9px;
+    padding: 0.35rem 0.6rem;
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    font-weight: 600;
+    line-height: 1.3;
+    white-space: nowrap;
+    box-shadow: 3px 3px 0 var(--ink);
+    opacity: 0;
+    transform: translateY(4px) scale(0.9);
+    transform-origin: bottom right;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+    pointer-events: none;
+  }
+
+  .speech-bubble::before,
+  .speech-bubble::after {
+    content: "";
+    position: absolute;
+    right: 13px;
+    border-left: 6px solid transparent;
+    border-right: 6px solid transparent;
+  }
+
+  .speech-bubble::before {
+    bottom: -9px;
+    border-top: 8px solid var(--ink);
+  }
+
+  .speech-bubble::after {
+    bottom: -6px;
+    border-left-width: 4px;
+    border-right-width: 4px;
+    right: 15px;
+    border-top: 6px solid var(--surface);
+  }
+
+  .speech-bubble.visible {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+
   @media (max-width: 860px) {
     .sprite { display: none; }
   }
@@ -564,6 +615,7 @@
 </style>
 
 <div class="sprite" id="sprite" aria-hidden="true">
+  <div class="speech-bubble" id="speechBubble"><span id="speechText"></span></div>
   <div class="sprite-frame" id="spriteFrame"></div>
 </div>
 
@@ -866,7 +918,15 @@
       var GRAVITY = 2200;
       var KICK = 9;
       var MAX_VELOCITY = 2800;
-      var maxRise = Math.min(window.innerHeight * 0.65, 420);
+
+      // Rise is capped only by the top edge of the viewport, not an
+      // arbitrary distance - recomputed on resize since it depends on
+      // the sprite's resolved bottom offset and the window height.
+      function computeMaxRise() {
+        var bottomOffset = parseFloat(getComputedStyle(sprite).bottom) || 0;
+        return Math.max(0, window.innerHeight - bottomOffset - sprite.offsetHeight - 6);
+      }
+      var maxRise = computeMaxRise();
 
       var position = 0;
       var velocity = 0;
@@ -941,8 +1001,52 @@
       }, { passive: true });
 
       window.addEventListener("resize", function () {
-        maxRise = Math.min(window.innerHeight * 0.65, 420);
+        maxRise = computeMaxRise();
       }, { passive: true });
+
+      /* ---- comic-style speech bubble: comments on whichever section is centered ---- */
+
+      var speechBubble = document.getElementById("speechBubble");
+      var speechText = document.getElementById("speechText");
+
+      if (speechBubble && speechText && "IntersectionObserver" in window) {
+        var sectionLabels = {
+          top: "Scroll to explore ↓",
+          about: "About",
+          experience: "Experience",
+          skills: "Skills",
+          background: "Background",
+          contact: "Say hello!"
+        };
+
+        var sections = Object.keys(sectionLabels)
+          .map(function (id) { return document.getElementById(id); })
+          .filter(Boolean);
+
+        var currentLabel = "";
+        function showLabel(id) {
+          var label = sectionLabels[id];
+          if (!label || label === currentLabel) return;
+          currentLabel = label;
+          speechText.textContent = label;
+          speechBubble.classList.add("visible");
+        }
+
+        // Shrinks the observed viewport to a thin band around its vertical
+        // center, so whichever section crosses the middle of the screen -
+        // not just any section barely peeking into view - drives the bubble.
+        var sectionObserver = new IntersectionObserver(function (entries) {
+          var best = null;
+          entries.forEach(function (entry) {
+            if (entry.isIntersecting && (!best || entry.intersectionRatio > best.intersectionRatio)) {
+              best = entry;
+            }
+          });
+          if (best) showLabel(best.target.id);
+        }, { rootMargin: "-45% 0px -45% 0px", threshold: [0, 0.1, 0.25, 0.5, 0.75, 1] });
+
+        sections.forEach(function (section) { sectionObserver.observe(section); });
+      }
     }
   })();
 </script>
